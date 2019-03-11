@@ -821,4 +821,7 @@ static inline int dma_mmap_wc(struct device *dev,
 #define dma_unmap_len_set(PTR, LEN_NAME, VAL)    do { } while (0)
 #endif
 
+#define zy_dbg(fmt, s...)      \
+    do { printk(KERN_ERR "zhangyu, %s(), line%d: " fmt, __FUNCTION__, __LINE__, ##s); } while (0)
+
 #endif
