@@ -125,6 +125,7 @@ obj-$(CONFIG_PCSPKR_PLATFORM)	+= pcspeaker.o
 obj-$(CONFIG_X86_CHECK_BIOS_CORRUPTION) += check.o
 
 obj-$(CONFIG_SWIOTLB)			+= pci-swiotlb.o
+obj-$(CONFIG_PVDMA)			+= pci-pvdma.o
 obj-$(CONFIG_OF)			+= devicetree.o
 obj-$(CONFIG_UPROBES)			+= uprobes.o
 obj-y					+= sysfb.o
