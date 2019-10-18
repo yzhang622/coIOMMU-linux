@@ -19,6 +19,34 @@ static struct pci_device_id pci_pvdma_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, pci_pvdma_ids);
 
+int pin_page_list_for_device(pin_pages_info *pin_info)
+{
+	int ret = 0;
+	u64 pin_data;
+	u64 count;
+
+	if (!pvdma_mmio_info) {
+		pvdma_dbg("pvdma_mmio_info is NULL.\n");
+		return PVDMA_PIN_FAIL;
+	}
+
+	pin_data = (__pa(pin_info)) | PIN_PAGES_IN_BATCH;
+
+	pvdma_mmio_info->info.gfn_bdf = pin_data;
+
+	if (test_bit(pin_info->bdf, device_bitmap))
+		return PVDMA_PIN_EMU_DEV;
+
+	for (count = 0; count < pin_info->nr_pages; count++) {
+		if (!is_page_pinned(pin_info->pfn[count])) {
+			ret = PVDMA_PIN_FAIL;
+			break;
+		}
+	}
+
+	return ret;
+}
+
 int pin_page_for_device(unsigned long pfn, unsigned short bdf)
 {
 	int ret;

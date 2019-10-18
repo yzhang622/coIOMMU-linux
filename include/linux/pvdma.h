@@ -20,6 +20,15 @@ typedef union PVDMA_MMMIO_Info {
 	} info;
 } PVDMA_MMMIO_Info;
 
+#define PIN_PAGES_IN_BATCH (1UL<<63)
+
+typedef struct pin_pages_info {
+	unsigned short	bdf;
+	unsigned short	pad[3];
+	unsigned long	nr_pages;
+	uint64_t	pfn[0];
+} pin_pages_info;
+
 #define PVDMA_INFO_NR_OBJS 64
 
 typedef struct {
@@ -69,6 +78,7 @@ typedef struct {
 
 extern int pvdma_enable(void);
 extern int pin_page_for_device(unsigned long pfn, unsigned short bdf);
+extern int pin_page_list_for_device(pin_pages_info *pin_info);
 extern bool is_page_pinned(unsigned long pfn);
 
 #define MAX_NUM_DEVICES (1 << 16)

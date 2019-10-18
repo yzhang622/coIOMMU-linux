@@ -227,11 +227,37 @@ static inline unsigned short get_pci_device_id(struct device *dev)
 	return PCI_DEVID(pdev->bus->number, pdev->devfn);
 }
 
+static int pin_and_mark_pfn(unsigned long pfn, unsigned short bdf, bool write)
+{
+	int ret = 0;
+
+	ret = mark_pfn(pfn, write);
+	if (ret != 0)
+		return ret;
+
+	if (!is_page_pinned(pfn)) {
+		ret = pin_page_for_device(pfn, bdf);
+		if (unlikely(ret != 0))
+			unmark_pfn(pfn, true);
+	}
+
+	return ret;
+}
+
 static int pin_and_mark_pfns(unsigned long start_pfn, unsigned short bdf,
 					unsigned long nr_pages, bool write)
 {
 	int ret = 0;
 	unsigned long count;
+	pin_pages_info *pin_info = NULL;
+
+	if (nr_pages == 1)
+		return pin_and_mark_pfn(start_pfn, bdf, write);
+
+	pin_info = kzalloc(sizeof(pin_pages_info) + nr_pages*sizeof(unsigned long),
+								GFP_KERNEL);
+	if (!pin_info)
+		return -1;
 
 	for (count = 0; count < nr_pages; count++) {
 		ret = mark_pfn(start_pfn + count, write);
@@ -241,16 +267,27 @@ static int pin_and_mark_pfns(unsigned long start_pfn, unsigned short bdf,
 		}
 
 		if (!is_page_pinned(start_pfn + count)) {
-			ret = pin_page_for_device(start_pfn + count, bdf);
-			if (unlikely(ret != 0)) {
-				/* Why + 1 here? */
-				unmark_pfns(start_pfn, count + 1, true);
-				goto out;
-			}
+			pin_info->pfn[pin_info->nr_pages] = start_pfn + count;
+			pin_info->nr_pages++;
 		}
 	}
 
+	if (pin_info->nr_pages > 0) {
+		pin_info->bdf = bdf;
+
+		ret = pin_page_list_for_device(pin_info);
+		if (unlikely(ret))	// pin failed
+			/*
+			 * Note - In case pin failures, all pfns required for
+			 * this dma mapping shall fail, which means none of
+			 * them will participate in the dma operations.
+			 * Hence their map count shall be decremented.
+			 */
+			unmark_pfns(start_pfn, nr_pages, true);
+	}
+
 out:
+	kfree(pin_info);
 	return ret;
 }
 
@@ -261,7 +298,22 @@ static int pin_and_mark_sg_list(struct scatterlist *sgl,
 	unsigned long nr_pages = 0;
 	phys_addr_t phys_addr;
 	unsigned long pfn;
-	int i, ret = 0;
+	unsigned long count;
+	pin_pages_info *pin_info = NULL;
+	int i, j, ret = 0;
+
+	for_each_sg(sgl, sg, nents, i) {
+		phys_addr = sg_phys(sg);
+		nr_pages +=  get_aligned_nrpages(phys_addr & (PAGE_SIZE - 1),
+								sg->length);
+	}
+
+	pin_info = kzalloc(sizeof(pin_pages_info) +
+				nr_pages * sizeof(unsigned long), GFP_KERNEL);
+	if (!pin_info)
+		return -1;
+
+	pin_info->bdf = bdf;
 
 	for_each_sg(sgl, sg, nents, i) {
 		BUG_ON(!sg_page(sg));
@@ -270,11 +322,51 @@ static int pin_and_mark_sg_list(struct scatterlist *sgl,
 		nr_pages = get_aligned_nrpages(phys_addr & (PAGE_SIZE - 1),
 								sg->length);
 
-		ret = pin_and_mark_pfns(pfn, bdf, nr_pages, write);
-		if (unlikely(ret != 0))
-			break;
+		for (count = 0; count < nr_pages; count++) {
+			ret = mark_pfn(pfn + count, write);
+			if (ret == -1) {
+				unmark_pfns(pfn, count, true);
+				break;
+			}
+
+			if (!is_page_pinned(pfn+count)) {
+				pin_info->pfn[pin_info->nr_pages] = pfn+count;
+				pin_info->nr_pages++;
+			}
+		}
 	}
 
+	if (unlikely(ret == -1)) {
+		for_each_sg(sgl, sg, i, j) {
+			phys_addr = sg_phys(sg);
+			pfn = phys_addr >> PAGE_SHIFT;
+			nr_pages = get_aligned_nrpages(
+				phys_addr & (PAGE_SIZE - 1), sg->length);
+
+			unmark_pfns(pfn, nr_pages, true);
+		}
+		goto out;
+	}
+
+	ret = pin_page_list_for_device(pin_info);
+	if (unlikely(ret)) {	// pin failed
+		/*
+		 * Note - In case pin failures, all pfns required for this
+		 * dma mapping shall fail, which means none of them will
+		 * participate in the dma operations. Hence their map count
+		 * shall be decremented.
+		 */
+		for_each_sg(sgl, sg, nents, i) {
+			phys_addr = sg_phys(sg);
+			pfn = phys_addr >> PAGE_SHIFT;
+			nr_pages = get_aligned_nrpages(
+				phys_addr & (PAGE_SIZE - 1), sg->length);
+			unmark_pfns(pfn, nr_pages, true);
+		}
+	}
+
+out:
+	kfree(pin_info);
 	return ret;
 }
 
