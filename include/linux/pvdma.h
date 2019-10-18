@@ -7,6 +7,54 @@
 #include <linux/types.h>
 
 #ifdef CONFIG_PVDMA
+
+#define PVDMA_INFO_NR_OBJS 64
+
+typedef struct {
+	int nobjs;
+	void *objects[PVDMA_INFO_NR_OBJS];
+} pvdma_info_cache;
+
+typedef struct {
+	spinlock_t ipt_lock;
+	uint64_t *ipt_root;
+	unsigned int ipt_level;
+	pvdma_info_cache pvdma_ipt_cache;
+} pvdma_ipt;
+
+extern pvdma_ipt ipt;
+
+#define IPTE_MAP_CNT_MASK	0xFFFF
+#define IPTE_MAP_CNT_MAX	0xFF
+#define IPTE_PINNED_FLAG	16
+#define IPTE_MAPPED_FLAG	17
+#define IPTE_ACCESSED_FLAG	18
+#define IPTE_WRITEABLE_FLAG	19
+//#define IPTE_DIRTY_FLAG	20
+
+typedef struct {
+	atomic_t ipte;
+} ipt_leaf_entry;
+
+typedef struct {
+	uint64_t present:1;
+	uint64_t reserve:11;
+	uint64_t pfn:52;
+} ipt_parent_entry;
+
+#define pvdma_set_flag(flag, iptep) \
+	set_bit(flag, (unsigned long *)iptep)
+
+#define pvdma_clear_flag(flag, iptep) \
+	clear_bit(flag, (unsigned long *)iptep)
+
+#define pvdma_test_flag(flag, iptep) \
+	test_bit(flag, (unsigned long *)iptep)
+
+#define PVDMA_PIN_SUCCESS	0
+#define PVDMA_PIN_FAIL		-1
+#define PVDMA_PIN_EMU_DEV	-2
+
 extern int pvdma_enable(void);
 
 #define MAX_NUM_DEVICES (1 << 16)
