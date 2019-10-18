@@ -227,11 +227,6 @@ static inline unsigned short get_pci_device_id(struct device *dev)
 	return PCI_DEVID(pdev->bus->number, pdev->devfn);
 }
 
-int pin_page_for_device(unsigned long pfn, unsigned short bdf)
-{
-	return 0;
-}
-
 static int pin_and_mark_pfns(unsigned long start_pfn, unsigned short bdf,
 					unsigned long nr_pages, bool write)
 {

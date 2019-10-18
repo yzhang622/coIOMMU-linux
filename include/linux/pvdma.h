@@ -8,6 +8,18 @@
 
 #ifdef CONFIG_PVDMA
 
+#define PVDMA_CMD_GET_DEV_BITMAP 1
+
+typedef union PVDMA_MMMIO_Info {
+	uint64_t regs[4];
+	struct PVDMA_Info {
+		uint64_t ipt_addr;
+		uint64_t command;
+		uint64_t ipt_level;
+		uint64_t gfn_bdf;
+	} info;
+} PVDMA_MMMIO_Info;
+
 #define PVDMA_INFO_NR_OBJS 64
 
 typedef struct {
@@ -56,6 +68,8 @@ typedef struct {
 #define PVDMA_PIN_EMU_DEV	-2
 
 extern int pvdma_enable(void);
+extern int pin_page_for_device(unsigned long pfn, unsigned short bdf);
+extern bool is_page_pinned(unsigned long pfn);
 
 #define MAX_NUM_DEVICES (1 << 16)
 extern void *device_bitmap;
